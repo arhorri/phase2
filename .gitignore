@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+
+# checkpoints
+*.pth.tar
+checkpoints/
+
+# training outputs
+*.csv
+.ipynb_checkpoints/
+
+# datasets (never commit; attach as a Kaggle Dataset input instead)
+data/
