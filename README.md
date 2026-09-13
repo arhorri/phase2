@@ -97,8 +97,32 @@ os.environ["SAVE_DIR"] = "/kaggle/working/checkpoints"
 
 To run interactively instead of as a script, open
 [train_from_scratch.ipynb](train_from_scratch.ipynb) in the Kaggle notebook editor
-(File > Import Notebook, or copy it into a new Kaggle notebook cell-by-cell), set the
-same environment variables in the first cell, and run all cells in order.
+(File > Import Notebook, or copy it into a new Kaggle notebook cell-by-cell). Its
+second cell ("Kaggle setup") sets the same environment variables — edit it to match
+your attached dataset slugs, then run all cells in order.
+
+### Troubleshooting: `FileNotFoundError: data/Train-Oversampled`
+
+This means `WHOLE_DIR`/`SEEN_TEST_DIR`/`UNSEEN_TEST_DIR` were never pointed at your
+Kaggle dataset, so the script fell back to its local-run defaults. Two things to check:
+
+1. **You need the image dataset attached, not just a checkpoint dataset.** A dataset
+   like `mic-mech3-checkpoint` (containing only `.pth.tar` files and CSVs) does not
+   contain the `Train-Oversampled`/`Test-Seen`/`Test-Unseen` image folders — you need
+   a separate dataset with those `ImageFolder`-structured directories attached under
+   "Datasets" in the notebook sidebar.
+2. **Set the env vars before the data-pipeline cell runs**, using the actual mounted
+   path — Kaggle mounts each attached dataset at `/kaggle/input/<dataset-slug>/...`.
+   Check the exact slug and folder names in the sidebar and set, e.g.:
+   ```python
+   import os
+   os.environ["WHOLE_DIR"] = "/kaggle/input/<your-image-dataset>/.../Train-Oversampled"
+   os.environ["SEEN_TEST_DIR"] = "/kaggle/input/<your-image-dataset>/.../Test-Seen"
+   os.environ["UNSEEN_TEST_DIR"] = "/kaggle/input/<your-image-dataset>/.../Test-Unseen"
+   os.environ["SAVE_DIR"] = "/kaggle/working/checkpoints"
+   ```
+   (`train_from_scratch.ipynb` has this as its "Kaggle setup" cell already — just edit
+   the paths to match your dataset slug.)
 
 Checkpoints are saved in the same `{"model_state", "ema_model_state",
 "model_optimizer"}` format used by `train.py` and
