@@ -23,6 +23,7 @@ from torchvision import datasets, transforms
 import os
 import copy
 import csv
+import shutil
 
 # =====================================================================================
 # CONFIG -- new: all paths/hyperparameters that must be edited per-environment are
@@ -46,10 +47,11 @@ save_dir = os.environ.get("SAVE_DIR", "checkpoints/")
 os.makedirs(save_dir, exist_ok=True)
 
 # new -- fail with a clear message instead of torchvision's raw FileNotFoundError
-# from deep inside ImageFolder if a directory is missing (e.g. Train-Oversampled
-# has not been added to az80-microstructure-data/ yet).
-for _name, _path in [("WHOLE_DIR", whole_dir), ("SEEN_TEST_DIR", seen_test_dir),
-                      ("UNSEEN_TEST_DIR", unseen_test_dir)]:
+# from deep inside ImageFolder if a directory is missing. WHOLE_DIR is checked
+# separately, further down, where a missing Train-Oversampled folder triggers an
+# interim fallback instead of a hard failure -- see "interim training-data fallback"
+# below.
+for _name, _path in [("SEEN_TEST_DIR", seen_test_dir), ("UNSEEN_TEST_DIR", unseen_test_dir)]:
     if not os.path.isdir(_path):
         raise FileNotFoundError(
             f"{_name} does not exist: '{_path}'. Set the {_name} environment "
@@ -93,8 +95,9 @@ min_delta = 0.0        # new -- our own default; minimum improvement to reset pa
 # new -- train.py initialized min_loss = 1848.41, a value carried over from a *prior*
 # training run's checkpoint. A from-scratch run has no such prior baseline, so we start
 # from +inf, matching microstructure-to-properties.ipynb / train.py's own
-# `total_loss_min = np.Inf` convention.
-min_loss = np.Inf
+# `total_loss_min = np.Inf` convention (spelled np.inf here -- np.Inf was removed in
+# NumPy 2.0, which Kaggle's images now ship).
+min_loss = np.inf
 
 # =====================================================================================
 # ported from train.py -- class/property lookup tables (class_table/seen_table/
@@ -265,6 +268,95 @@ unseen_table = torch.tensor([[    0.000,     1.000,     2.000,     3.000,     1.
         [    0.115,     0.115,     0.115,     0.115,     0.143,     0.120,
              0.120,     0.120,     0.120,     0.148,     0.125,     0.125,
              0.125,     0.125]])
+
+# ported from train.py -- label-string dictionaries for seen_table/unseen_table
+seen_label = {
+    0: "CM04-0500", 1: "CM10-0500", 2: "CM10-1000", 3: "CM16-1000",
+    4: "CM16-2000", 5: "CS01-1000", 6: "CS04-1500", 7: "CS10-0500",
+    8: "CS10-1000", 9: "CS10-1500", 10: "CS10-2000", 11: "PL03-0500",
+    12: "PL03-1000", 13: "PL13-0500", 14: "PL13-1000", 15: "PL16-0500",
+    16: "PL16-1000", 17: "PM03-0500", 18: "PM11-0500", 19: "PM11-1000",
+    20: "PM13-0500", 21: "PM13-1000", 22: "PM13-2000", 23: "PM16-0500",
+    24: "PM16-1000", 25: "PM16-2000", 26: "PS11-0500", 27: "PS11-1000",
+    28: "PS11-2000", 29: "PS16-0500", 30: "PS16-1000", 31: "PS16-2000"
+}
+
+unseen_label = {
+    0: 'CM06-0500', 1: 'CM06-1000', 2: 'CM06-1500', 3: 'CM06-2000',
+    4: 'CS04-1000', 5: 'CS06-0500', 6: 'CS06-1000', 7: 'CS06-1500',
+    8: 'CS06-2000', 9: 'PM03-1500', 10: 'PS13-0500', 11: 'PS13-1000',
+    12: 'PS13-1500', 13: 'PS13-2000'
+}
+
+# =====================================================================================
+# new -- interim training-data fallback. The paper's real Train-Oversampled dataset
+# (83 classes, oversampled via a diffusion model) is not available in this repo.
+# If WHOLE_DIR doesn't exist, auto-build a small merged training set from Test-Seen +
+# Test-Unseen instead, so the pipeline (forward/backward pass, EMA, checkpointing, CSV
+# export) can be exercised end-to-end while the real data is unavailable.
+#
+# IMPORTANT: validation below still reads the ORIGINAL Test-Seen/Test-Unseen folders,
+# so most images end up in both training and validation under this fallback -- it does
+# NOT measure generalization and its results are not scientifically meaningful. This
+# exists purely to prove the code runs. See README.md "Training data status".
+#
+# Once the real Train-Oversampled folder is added, WHOLE_DIR will exist, this whole
+# block is skipped automatically, and the original 83-class `class_table` is used
+# exactly as train.py intended -- no config changes needed.
+# =====================================================================================
+
+def _name_to_props(table, label_dict):
+    return {name: table[:, idx] for idx, name in label_dict.items()}
+
+
+_known_props = {**_name_to_props(seen_table, seen_label), **_name_to_props(unseen_table, unseen_label)}
+
+
+def _build_class_table(directory, name_to_props):
+    class_names = sorted(entry.name for entry in os.scandir(directory) if entry.is_dir())
+    missing = [n for n in class_names if n not in name_to_props]
+    if missing:
+        raise ValueError(f"No known property values for classes {missing} in '{directory}'")
+    return torch.stack([name_to_props[n] for n in class_names], dim=1)
+
+
+def _build_fallback_train_dir(dest_dir, *source_dirs):
+    if os.path.isdir(dest_dir):
+        shutil.rmtree(dest_dir)
+    os.makedirs(dest_dir, exist_ok=True)
+    n_images = 0
+    n_classes = 0
+    for src in source_dirs:
+        for entry in sorted(os.scandir(src), key=lambda e: e.name):
+            if not entry.is_dir():
+                continue
+            files = sorted(os.listdir(entry.path))
+            if not files:
+                continue
+            # keep all but one image per class for training; classes with only one
+            # image contribute it to training too (there is nothing left to hold out)
+            keep = files[:-1] if len(files) > 1 else files
+            dst_class_dir = os.path.join(dest_dir, entry.name)
+            os.makedirs(dst_class_dir, exist_ok=True)
+            for fname in keep:
+                shutil.copy2(os.path.join(entry.path, fname), os.path.join(dst_class_dir, fname))
+            n_images += len(keep)
+            n_classes += 1
+    return n_images, n_classes
+
+
+using_fallback_train_data = not os.path.isdir(whole_dir)
+if using_fallback_train_data:
+    _fallback_dir = os.path.join(os.path.dirname(os.path.normpath(seen_test_dir)), "_generated_train_small")
+    _n_images, _n_classes = _build_fallback_train_dir(_fallback_dir, seen_test_dir, unseen_test_dir)
+    print(f"WARNING: '{whole_dir}' not found -- using an auto-built {_n_images}-image, "
+          f"{_n_classes}-class training set from '{seen_test_dir}' + '{unseen_test_dir}' "
+          f"instead. This is NOT the paper's real training data and will not produce a "
+          f"meaningful model -- it only exercises the pipeline end-to-end. See README.md.")
+    whole_dir = _fallback_dir
+    training_class_table = _build_class_table(whole_dir, _known_props)
+else:
+    training_class_table = class_table
 
 # =====================================================================================
 # ported from train.py -- data pipeline (transforms, datasets, loaders). The
@@ -613,7 +705,7 @@ for epoch in range(1, n_epoch + 1):
         optimizer.zero_grad()
         images = aug_transform(images)
         images = images.to(device)
-        mag, ys, uts, el, e, k, n = class_maker(batch_size=labels.size(0), labels=labels, tab=class_table)
+        mag, ys, uts, el, e, k, n = class_maker(batch_size=labels.size(0), labels=labels, tab=training_class_table)
         ys = noise(ys, ys_range)
         uts = noise(uts, uts_range)
         el = noise(el, el_range)

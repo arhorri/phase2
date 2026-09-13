@@ -13,3 +13,9 @@ checkpoints/
 # datasets: az80-microstructure-data/ is intentionally committed (see README.md);
 # anything else under data/ stays ignored.
 data/
+
+# auto-built interim training fallback (regenerated at runtime, see train_from_scratch.py)
+az80-microstructure-data/_generated_train_small/
+
+# unrelated dataset explored and rejected for this task (different label scheme; see README.md)
+data_erfan/

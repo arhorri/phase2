@@ -70,12 +70,36 @@ or after `git clone` on Kaggle — no dataset attachment step required.
 Override any of these as environment variables only if you keep the data elsewhere
 (e.g. a separate Kaggle Dataset mounted under `/kaggle/input/...`).
 
-**Current status:** `az80-microstructure-data/` only contains `Test-Seen` and
-`Test-Unseen` so far — `Train-Oversampled` still needs to be added (83 classes, matching
-`class_table` in the script) before the training loop can run. Both scripts check for
-all three directories up front and raise a clear `FileNotFoundError` naming the missing
-one, instead of the raw error from deep inside `ImageFolder`. Checkpoints and CSV
-outputs are still gitignored (see `.gitignore`) — only the image data itself is tracked.
+### Training data status
+
+`az80-microstructure-data/` only contains `Test-Seen` and `Test-Unseen` (72 images, 46
+classes total) — **the real `Train-Oversampled` dataset (83 classes, synthetically
+oversampled by the paper's authors via a diffusion model) could not be found publicly**
+and is not in this repo. It's a private dataset attached to the authors' own Kaggle
+notebook, not a released/downloadable dataset. `SEEN_TEST_DIR`/`UNSEEN_TEST_DIR` are
+checked up front and raise a clear `FileNotFoundError` if missing.
+
+**Interim fallback:** if `WHOLE_DIR` (`Train-Oversampled`) doesn't exist,
+`train_from_scratch.py`/`.ipynb` automatically build a small merged training set from
+`Test-Seen` + `Test-Unseen` instead (holding out one image per class where more than
+one exists), so the pipeline — forward/backward pass, EMA, checkpointing, CSV export —
+can be exercised end-to-end without the real data. **This fallback does not produce a
+meaningful model.** Validation still reads the original `Test-Seen`/`Test-Unseen`
+folders, so most images end up in both training and validation — it doesn't measure
+generalization, it only proves the code runs. A console warning is printed whenever
+this fallback is active.
+
+A folder called `data_erfan` was investigated as a possible substitute and rejected: it
+has a different class taxonomy (114 classes, 6 magnifications) and, critically, its
+label file contains categorical process parameters (Shape, Location, Cooling rate,
+Soaking, Heat-treatment, Forging Temp) rather than the YS/UTS/EL/E/k/n values
+`Net_conditional` predicts — it appears to belong to a different (related) piece of
+work by the same first author, not this paper's dataset. It's gitignored and unused.
+
+Once the real `Train-Oversampled` folder is added under `az80-microstructure-data/`,
+the fallback is skipped automatically and the original 83-class `class_table` is used
+exactly as `train.py` intended — no code changes needed. Checkpoints and CSV outputs
+stay gitignored (see `.gitignore`) — only image data is tracked.
 
 ## Running on Kaggle
 
