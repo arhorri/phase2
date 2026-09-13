@@ -5,9 +5,11 @@ __pycache__/
 *.pth.tar
 checkpoints/
 
-# training outputs
+# training outputs (Train*.csv, Seen-Test*.csv, Unseen-Test*.csv)
 *.csv
+!az80-microstructure-data/**/*.csv
 .ipynb_checkpoints/
 
-# datasets (never commit; attach as a Kaggle Dataset input instead)
+# datasets: az80-microstructure-data/ is intentionally committed (see README.md);
+# anything else under data/ stays ignored.
 data/

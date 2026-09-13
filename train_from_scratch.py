@@ -34,15 +34,27 @@ trial = 1
 
 # --- Data / checkpoint directories --------------------------------------------------
 # new -- these were hardcoded Kaggle absolute paths in train.py
-# (e.g. '/kaggle/input/mic-mech/Mic-Mech/Train-Oversampled'). Point them at:
-#   - a local dataset folder when running on your machine
-#   - a Kaggle Dataset mount path (/kaggle/input/<dataset-name>/...) when run on Kaggle
-# Do not commit real dataset contents to this repo (see .gitignore / README.md).
-whole_dir = os.environ.get("WHOLE_DIR", "data/Train-Oversampled")
-seen_test_dir = os.environ.get("SEEN_TEST_DIR", "data/Test-Seen")
-unseen_test_dir = os.environ.get("UNSEEN_TEST_DIR", "data/Test-Unseen")
+# (e.g. '/kaggle/input/mic-mech/Mic-Mech/Train-Oversampled'). The dataset now ships
+# inside this repo under az80-microstructure-data/, so the defaults below work
+# unchanged locally, in Colab, or after `git clone` on Kaggle -- no per-environment
+# dataset attachment needed. Override via env vars only if you keep the data
+# somewhere else (e.g. a separate Kaggle Dataset mounted at /kaggle/input/...).
+whole_dir = os.environ.get("WHOLE_DIR", "az80-microstructure-data/Train-Oversampled")
+seen_test_dir = os.environ.get("SEEN_TEST_DIR", "az80-microstructure-data/Test-Seen")
+unseen_test_dir = os.environ.get("UNSEEN_TEST_DIR", "az80-microstructure-data/Test-Unseen")
 save_dir = os.environ.get("SAVE_DIR", "checkpoints/")
 os.makedirs(save_dir, exist_ok=True)
+
+# new -- fail with a clear message instead of torchvision's raw FileNotFoundError
+# from deep inside ImageFolder if a directory is missing (e.g. Train-Oversampled
+# has not been added to az80-microstructure-data/ yet).
+for _name, _path in [("WHOLE_DIR", whole_dir), ("SEEN_TEST_DIR", seen_test_dir),
+                      ("UNSEEN_TEST_DIR", unseen_test_dir)]:
+    if not os.path.isdir(_path):
+        raise FileNotFoundError(
+            f"{_name} does not exist: '{_path}'. Set the {_name} environment "
+            f"variable to the correct path, or add the missing folder under "
+            f"az80-microstructure-data/.")
 
 # new -- train.py loaded a pretrained checkpoint here before training (making it a
 # continuation/fine-tuning run). This script trains from scratch, so no checkpoint is

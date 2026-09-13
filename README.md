@@ -53,24 +53,29 @@ provided files.
 
 ## Configuring paths
 
-All directories are set at the top of `train_from_scratch.py`, overridable via
-environment variables:
+The dataset is committed directly in this repo under `az80-microstructure-data/`
+(`ImageFolder`-structured: one subfolder per class, matching
+`label_dict`/`seen_label`/`unseen_label` in the script), so the defaults in
+`train_from_scratch.py`/`train_from_scratch.ipynb` work unchanged locally, in Colab,
+or after `git clone` on Kaggle — no dataset attachment step required.
 
 | Variable | Env var | Default |
 |---|---|---|
-| Training data | `WHOLE_DIR` | `data/Train-Oversampled` |
-| Seen test data | `SEEN_TEST_DIR` | `data/Test-Seen` |
-| Unseen test data | `UNSEEN_TEST_DIR` | `data/Test-Unseen` |
+| Training data | `WHOLE_DIR` | `az80-microstructure-data/Train-Oversampled` |
+| Seen test data | `SEEN_TEST_DIR` | `az80-microstructure-data/Test-Seen` |
+| Unseen test data | `UNSEEN_TEST_DIR` | `az80-microstructure-data/Test-Unseen` |
 | Checkpoint/CSV output | `SAVE_DIR` | `checkpoints/` |
 | Optional resume checkpoint | `RESUME_DIR` | unset (no resume — true from-scratch run) |
 
-Each directory should be structured the same way as an `ImageFolder` dataset (one
-subfolder per class, matching `label_dict`/`seen_label`/`unseen_label` in the script).
+Override any of these as environment variables only if you keep the data elsewhere
+(e.g. a separate Kaggle Dataset mounted under `/kaggle/input/...`).
 
-Datasets and checkpoints are **not** committed to this repo (see `.gitignore`).
-Attach the training/test image folders and any checkpoint you want to resume from as a
-Kaggle Dataset input, then point the env vars above at the mounted
-`/kaggle/input/<dataset-name>/...` paths.
+**Current status:** `az80-microstructure-data/` only contains `Test-Seen` and
+`Test-Unseen` so far — `Train-Oversampled` still needs to be added (83 classes, matching
+`class_table` in the script) before the training loop can run. Both scripts check for
+all three directories up front and raise a clear `FileNotFoundError` naming the missing
+one, instead of the raw error from deep inside `ImageFolder`. Checkpoints and CSV
+outputs are still gitignored (see `.gitignore`) — only the image data itself is tracked.
 
 ## Running on Kaggle
 
@@ -80,49 +85,16 @@ In a fresh Kaggle notebook (GPU enabled, P100 or T4):
 !git clone https://github.com/arhorri/phase2.git
 %cd phase2
 !pip install -r requirements.txt
-```
-
-Then, after attaching your dataset(s) as Kaggle Dataset inputs and setting the
-directory env vars to match their mounted paths:
-
-```python
-import os
-os.environ["WHOLE_DIR"] = "/kaggle/input/<dataset>/Train-Oversampled"
-os.environ["SEEN_TEST_DIR"] = "/kaggle/input/<dataset>/Test-Seen"
-os.environ["UNSEEN_TEST_DIR"] = "/kaggle/input/<dataset>/Test-Unseen"
-os.environ["SAVE_DIR"] = "/kaggle/working/checkpoints"
-
 !python train_from_scratch.py
 ```
 
+No dataset attachment or path editing is needed unless you want to override the
+defaults (see the table above).
+
 To run interactively instead of as a script, open
 [train_from_scratch.ipynb](train_from_scratch.ipynb) in the Kaggle notebook editor
-(File > Import Notebook, or copy it into a new Kaggle notebook cell-by-cell). Its
-second cell ("Kaggle setup") sets the same environment variables — edit it to match
-your attached dataset slugs, then run all cells in order.
-
-### Troubleshooting: `FileNotFoundError: data/Train-Oversampled`
-
-This means `WHOLE_DIR`/`SEEN_TEST_DIR`/`UNSEEN_TEST_DIR` were never pointed at your
-Kaggle dataset, so the script fell back to its local-run defaults. Two things to check:
-
-1. **You need the image dataset attached, not just a checkpoint dataset.** A dataset
-   like `mic-mech3-checkpoint` (containing only `.pth.tar` files and CSVs) does not
-   contain the `Train-Oversampled`/`Test-Seen`/`Test-Unseen` image folders — you need
-   a separate dataset with those `ImageFolder`-structured directories attached under
-   "Datasets" in the notebook sidebar.
-2. **Set the env vars before the data-pipeline cell runs**, using the actual mounted
-   path — Kaggle mounts each attached dataset at `/kaggle/input/<dataset-slug>/...`.
-   Check the exact slug and folder names in the sidebar and set, e.g.:
-   ```python
-   import os
-   os.environ["WHOLE_DIR"] = "/kaggle/input/<your-image-dataset>/.../Train-Oversampled"
-   os.environ["SEEN_TEST_DIR"] = "/kaggle/input/<your-image-dataset>/.../Test-Seen"
-   os.environ["UNSEEN_TEST_DIR"] = "/kaggle/input/<your-image-dataset>/.../Test-Unseen"
-   os.environ["SAVE_DIR"] = "/kaggle/working/checkpoints"
-   ```
-   (`train_from_scratch.ipynb` has this as its "Kaggle setup" cell already — just edit
-   the paths to match your dataset slug.)
+(File > Import Notebook, or copy it into a new Kaggle notebook cell-by-cell) and run
+all cells in order.
 
 Checkpoints are saved in the same `{"model_state", "ema_model_state",
 "model_optimizer"}` format used by `train.py` and
