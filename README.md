@@ -101,6 +101,23 @@ the fallback is skipped automatically and the original 83-class `class_table` is
 exactly as `train.py` intended — no code changes needed. Checkpoints and CSV outputs
 stay gitignored (see `.gitignore`) — only image data is tracked.
 
+## Running on Google Colab
+
+1. Go to [colab.research.google.com](https://colab.research.google.com), File > Upload
+   notebook, and pick [train_from_scratch.ipynb](train_from_scratch.ipynb) from this
+   repo.
+2. Runtime > Change runtime type > select a GPU.
+3. Run all cells in order. The first code cell (the bootstrap cell) checks whether
+   `az80-microstructure-data/Test-Seen` is already reachable from the current working
+   directory; if not, it clones this repo (into `/content/phase2` on Colab, or
+   `./phase2` elsewhere), `cd`s into it, and installs `requirements.txt` -- every later
+   cell's relative dataset paths then resolve correctly. It's a no-op if the dataset is
+   already present (e.g. running locally from an existing checkout).
+
+No dataset attachment or path editing is needed unless you want to override the
+defaults (see the table above) -- set the relevant environment variable (e.g. via
+`os.environ["SAVE_DIR"] = ...` in a cell before the Config cell runs) if you do.
+
 ## Running on Kaggle
 
 In a fresh Kaggle notebook (GPU enabled, P100 or T4):
@@ -112,13 +129,14 @@ In a fresh Kaggle notebook (GPU enabled, P100 or T4):
 !python train_from_scratch.py
 ```
 
-No dataset attachment or path editing is needed unless you want to override the
-defaults (see the table above).
-
 To run interactively instead of as a script, open
 [train_from_scratch.ipynb](train_from_scratch.ipynb) in the Kaggle notebook editor
 (File > Import Notebook, or copy it into a new Kaggle notebook cell-by-cell) and run
-all cells in order.
+all cells in order -- the bootstrap cell clones the repo into `./phase2` and `cd`s into
+it automatically if the dataset isn't already present, same as on Colab. If running the
+`.py` script directly instead of the notebook, clone/`cd`/`pip install` manually first,
+as in the shell snippet above (the script itself has no bootstrap step, since it can
+only run after it already exists on disk).
 
 Checkpoints are saved in the same `{"model_state", "ema_model_state",
 "model_optimizer"}` format used by `train.py` and
