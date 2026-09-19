@@ -158,8 +158,15 @@ continues training an already-trained checkpoint).
    - Training then runs for up to 800 epochs, stopping early if it goes 50
      epochs with no improvement. Progress prints after every epoch, along
      with a live-updating loss plot (train/seen-val/unseen-val), and every
-     10 epochs (configurable via `IMAGE_LOG_EVERY`) a grid of sample
-     validation images with predicted-vs-true property values.
+     10 epochs (configurable via `IMAGE_LOG_EVERY`, plus the run's final
+     epoch) a grid of sample validation images with predicted-vs-true
+     property values and their % error.
+   - At that same cadence, three more diagnostics modeled on the source
+     paper's own figures are also shown: Grad-CAM heatmaps (which parts of
+     the micrograph the model relied on), a per-class predicted-vs-target
+     scatter plot with NRMSE/R² per property (averaging predictions over
+     every image of a class, seen vs. unseen), and reconstructed
+     Ramberg-Osgood stress-strain curves comparing real vs. predicted E/K/n.
    - The trained model and CSV logs are saved under `checkpoints/`.
 
 ### On Kaggle
